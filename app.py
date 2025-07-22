@@ -20,40 +20,33 @@ def load_data():
 try:
     df = load_data()
     
-    # Clean column names
-    df.columns = df.columns.str.strip()
-    
     # Create groups - first 20 are General, next 20 are Neuro
     df['GROUP'] = ['General' if i < 20 else 'Neuro' for i in range(len(df))]
     
+    # Convert binary columns to more readable format (0=No, 1=Yes)
+    binary_cols = [col for col in df.columns if col.startswith(('P12_', 'PW_', 'L7_', 'LFP_', 'DV_', 'PNECK_', 'PAW_'))]
+    for col in binary_cols:
+        df[col] = df[col].map({0: 'No', 1: 'Yes'})
+    
     # Convert categorical columns to meaningful labels
     df['GENDER'] = df['GENDER'].map({1: 'Male', 2: 'Female'})
-    df['BMI CATEGORY'] = df['BMI CATEGORY'].map({
+    df['BMI_CATEGORY'] = df['BMI_CATEGORY'].map({
         0: 'Unknown',
         1: 'Underweight',
         2: 'Normal',
         3: 'Overweight'
     })
-    df['WORKING PLACE'] = df['WORKING PLACE'].map({
+    df['WORKING_PLACE'] = df['WORKING_PLACE'].map({
         1: 'Hospital',
         2: 'Clinic',
         3: 'Private Practice'
     })
-    df['THECNNIQUE USED'] = df['THECNNIQUE USED'].map({
+    df['TECHNQUE_USED'] = df['TECHNQUE_USED'].map({
         0: 'None',
         1: 'Manual Therapy',
         2: 'Exercise Therapy',
         3: 'Electrotherapy'
     })
-    
-    # Convert pain-related columns to Yes/No
-    pain_cols = []
-    for col in df.columns:
-        if 'Unnamed' not in str(col) and col not in ['PARTICIPANT ID', 'AGE', 'HEIGHT', 'WEIGHT', 'BMI', 
-                                                   'YEAR OF EXPERIENCE', 'REBA SCORE', 'REBA_CATEGORY', 'GROUP']:
-            if df[col].dtype == 'int64' and set(df[col].unique()).issubset({0, 1}):
-                df[col] = df[col].map({0: 'No', 1: 'Yes'})
-                pain_cols.append(col)
     
 except Exception as e:
     st.error(f"Error loading or processing data: {str(e)}")
@@ -101,16 +94,15 @@ def create_pie_chart(data, group, title):
     return fig
 
 def create_body_part_comparison():
-    body_parts = ['NECK', 'SHOULDER', 'ELBOW', 'WRIST / HAND', 
-                 'UPPER BACK', 'LOWER BACK', 'HIP', 'KNEE', 'ANKLE / FEET']
+    body_parts = ['NECK', 'SHD', 'ELB', 'WRI', 'UB', 'LB', 'HIP', 'KNEE', 'ANK']
     pain_data = []
     
     for part in body_parts:
         for group in ['General', 'Neuro']:
             subset = df[df['GROUP'] == group]
             # Calculate percentage of 'Yes' responses
-            if part in subset.columns:
-                incidence = (subset[part] == 'Yes').mean() * 100
+            if f'P12_{part}' in subset.columns:
+                incidence = (subset[f'P12_{part}'] == 'Yes').mean() * 100
                 pain_data.append({
                     'Body Part': part,
                     'Group': group,
@@ -126,12 +118,9 @@ def create_body_part_comparison():
     fig.update_layout(uniformtext_minsize=8, uniformtext_mode='hide')
     return fig
 
-# Main title
-st.title("Comparative Analysis of Ergonomic Risk Factors, Physical Stress and Strain Among General and Pediatric Neuro Physiotherapists")
-
 # Pages
 if page == "Overview":
-    st.header("Comparative Analysis Overview")
+    st.title("Comparative Analysis Overview")
     
     col1, col2 = st.columns(2)
     
@@ -150,24 +139,6 @@ if page == "Overview":
                      barmode='group')
         st.plotly_chart(fig, use_container_width=True)
     
-    col3, col4 = st.columns(2)
-    
-    with col3:
-        st.subheader("BMI Distribution")
-        bmi_df = df.groupby(['GROUP', 'BMI CATEGORY']).size().reset_index(name='Count')
-        fig = px.bar(bmi_df, x='GROUP', y='Count', color='BMI CATEGORY',
-                     title="BMI Category by Group",
-                     barmode='group')
-        st.plotly_chart(fig, use_container_width=True)
-        
-    with col4:
-        st.subheader("Technique Used")
-        tech_df = df.groupby(['GROUP', 'THECNNIQUE USED']).size().reset_index(name='Count')
-        fig = px.bar(tech_df, x='GROUP', y='Count', color='THECNNIQUE USED',
-                     title="Treatment Techniques by Group",
-                     barmode='group')
-        st.plotly_chart(fig, use_container_width=True)
-    
     st.subheader("Key Initial Observations")
     st.write("""
     1. Neuro physiotherapists show higher REBA scores on average compared to general physiotherapists.
@@ -178,7 +149,7 @@ if page == "Overview":
     """)
 
 elif page == "REBA Score Analysis":
-    st.header("REBA Score Analysis")
+    st.title("REBA Score Analysis")
     
     tab1, tab2, tab3 = st.tabs(["Distribution", "Comparison", "Risk Categories"])
     
@@ -239,7 +210,7 @@ elif page == "REBA Score Analysis":
         """)
 
 elif page == "Pain Incidence":
-    st.header("Pain Incidence Analysis")
+    st.title("Pain Incidence Analysis")
     
     st.subheader("12-Month Pain Incidence by Body Part")
     fig = create_body_part_comparison()
@@ -251,34 +222,33 @@ elif page == "Pain Incidence":
     
     with tab1:
         st.write("**Neck Pain Characteristics**")
-        neck_cols = ['NECK'] + [col for col in df.columns if 'Unnamed: 1' in str(col)]
+        neck_cols = ['PNECK_PAIN', 'PW_NECK', '7DAYS_PAIN', 'LOP_NECK', 'DOC _VISIT']
         neck_df = df.groupby('GROUP')[neck_cols].apply(lambda x: (x == 'Yes').mean() * 100).reset_index()
         st.dataframe(neck_df.style.format("{:.1f}%").background_gradient(), use_container_width=True)
         
     with tab2:
         st.write("**Upper Body Pain Characteristics**")
-        ub_cols = ['UPPER BACK'] + [col for col in df.columns if 'Unnamed: 3' in str(col)]
+        ub_cols = ['P12_UB', 'PW_UB', 'L7_UB', 'LOP_UB', 'DV_UB']
         ub_df = df.groupby('GROUP')[ub_cols].apply(lambda x: (x == 'Yes').mean() * 100).reset_index()
         st.dataframe(ub_df.style.format("{:.1f}%").background_gradient(), use_container_width=True)
         
     with tab3:
         st.write("**Lower Body Pain Characteristics**")
-        lb_cols = ['LOWER BACK', 'HIP', 'KNEE', 'ANKLE / FEET']
+        lb_cols = ['P12_LB', 'PAW_LB', 'L7DAYS_LB', 'LFPAIN_LB', 'DV_LB']
         lb_df = df.groupby('GROUP')[lb_cols].apply(lambda x: (x == 'Yes').mean() * 100).reset_index()
         st.dataframe(lb_df.style.format("{:.1f}%").background_gradient(), use_container_width=True)
 
 elif page == "Body Part Comparison":
-    st.header("Detailed Body Part Comparison")
+    st.title("Detailed Body Part Comparison")
     
     body_part = st.selectbox("Select Body Part", 
-                            ['NECK', 'SHOULDER', 'ELBOW', 'WRIST / HAND', 
-                             'UPPER BACK', 'LOWER BACK', 'HIP', 'KNEE', 'ANKLE / FEET'])
+                            ['NECK', 'SHD', 'ELB', 'WRI', 'UB', 'LB', 'HIP', 'KNEE', 'ANK'])
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader(f"12-Month Pain Incidence - {body_part}")
-        incidence_df = df.groupby('GROUP')[body_part].value_counts(normalize=True).unstack().fillna(0) * 100
+        incidence_df = df.groupby('GROUP')[f'P12_{body_part}'].value_counts(normalize=True).unstack().fillna(0) * 100
         fig = px.bar(incidence_df, barmode='group',
                      title=f"12-Month Pain Incidence - {body_part}",
                      labels={'value': 'Percentage', 'variable': 'Pain Reported'})
@@ -286,35 +256,23 @@ elif page == "Body Part Comparison":
         
     with col2:
         st.subheader(f"Recent Pain (7 Days) - {body_part}")
-        # Find the corresponding 7-day pain column
-        seven_day_col = None
-        for col in df.columns:
-            if 'Unnamed' in str(col) and body_part in str(df.columns[df.columns.get_loc(col)-1]):
-                seven_day_col = col
-                break
-        
-        if seven_day_col:
-            recent_df = df.groupby('GROUP')[seven_day_col].value_counts(normalize=True).unstack().fillna(0) * 100
+        if f'L7_{body_part}' in df.columns:
+            recent_df = df.groupby('GROUP')[f'L7_{body_part}'].value_counts(normalize=True).unstack().fillna(0) * 100
             fig = px.bar(recent_df, barmode='group',
                         title=f"Recent Pain (7 Days) - {body_part}",
                         labels={'value': 'Percentage', 'variable': 'Pain Reported'})
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning(f"No 7-day pain data available for {body_part}")
+            st.warning(f"No data available for L7_{body_part}")
     
     st.subheader(f"Pain Characteristics - {body_part}")
-    # Find all related columns for this body part
-    related_cols = [body_part]
-    part_index = df.columns.get_loc(body_part)
-    for i in range(1, 4):  # Assuming up to 4 related columns per body part
-        if part_index + i < len(df.columns) and 'Unnamed' in str(df.columns[part_index + i]):
-            related_cols.append(df.columns[part_index + i])
-    
-    char_df = df.groupby('GROUP')[related_cols].apply(lambda x: (x == 'Yes').mean() * 100).reset_index()
+    char_cols = [f'P12_{body_part}', f'PW_{body_part}', 
+                f'L7_{body_part}', f'LFP_{body_part}', f'DV_{body_part}']
+    char_df = df.groupby('GROUP')[char_cols].apply(lambda x: (x == 'Yes').mean() * 100).reset_index()
     st.dataframe(char_df.style.format("{:.1f}%").background_gradient(), use_container_width=True)
 
 elif page == "Detailed Insights":
-    st.header("Detailed Insights and Findings")
+    st.title("Detailed Insights and Findings")
     
     st.subheader("Top 10 Insights from the Analysis")
     insights = [
@@ -352,7 +310,7 @@ elif page == "Detailed Insights":
     """)
 
 elif page == "Data Explorer":
-    st.header("Data Explorer")
+    st.title("Data Explorer")
     
     st.subheader("Raw Data")
     st.dataframe(df, use_container_width=True)
@@ -365,7 +323,7 @@ elif page == "Data Explorer":
         gender_filter = st.multiselect("Filter by Gender", df['GENDER'].unique(), df['GENDER'].unique())
         
     with col2:
-        bmi_filter = st.multiselect("Filter by BMI Category", df['BMI CATEGORY'].unique(), df['BMI CATEGORY'].unique())
+        bmi_filter = st.multiselect("Filter by BMI Category", df['BMI_CATEGORY'].unique(), df['BMI_CATEGORY'].unique())
         reba_filter = st.slider("Filter by REBA Category", 
                               min_value=int(df['REBA_CATEGORY'].min()), 
                               max_value=int(df['REBA_CATEGORY'].max()),
@@ -374,7 +332,7 @@ elif page == "Data Explorer":
     filtered_df = df[
         (df['GROUP'].isin(group_filter)) &
         (df['GENDER'].isin(gender_filter)) &
-        (df['BMI CATEGORY'].isin(bmi_filter)) &
+        (df['BMI_CATEGORY'].isin(bmi_filter)) &
         (df['REBA_CATEGORY'].between(reba_filter[0], reba_filter[1]))
     ]
     
@@ -409,11 +367,6 @@ st.markdown("""
         border-left: 4px solid #4e79a7;
         padding-left: 10px;
         margin-bottom: 15px;
-    }
-    .stTitle {
-        font-size: 2.5em;
-        text-align: center;
-        margin-bottom: 30px;
     }
 </style>
 """, unsafe_allow_html=True)
