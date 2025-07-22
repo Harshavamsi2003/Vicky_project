@@ -9,10 +9,16 @@ from plotly.subplots import make_subplots
 @st.cache_data
 def load_data():
     df = pd.read_excel('DATA.xlsx')
+    # Clean column names (remove extra spaces)
+    df.columns = df.columns.str.strip()
     # Split into two groups
-    general = df.iloc[:20]
-    neuro = df.iloc[20:]
-    return df, general, neuro
+    general = df.iloc[:20].copy()
+    neuro = df.iloc[20:].copy()
+    # Add group labels
+    general['Group'] = 'General'
+    neuro['Group'] = 'Neuro'
+    combined = pd.concat([general, neuro])
+    return combined, general, neuro
 
 df, general, neuro = load_data()
 
@@ -73,10 +79,13 @@ elif page == "Demographics":
     st.title("Demographic Comparison")
     
     # Gender distribution
-    fig1 = px.pie(values=[general['GENDER'].value_counts()[1], general['GENDER'].value_counts()[2]], 
+    gen_gender = general['GENDER'].value_counts()
+    neuro_gender = neuro['GENDER'].value_counts()
+    
+    fig1 = px.pie(values=[gen_gender.get(1, 0), gen_gender.get(2, 0)], 
                  names=['Male', 'Female'], 
                  title='Gender Distribution - General')
-    fig2 = px.pie(values=[neuro['GENDER'].value_counts()[1], neuro['GENDER'].value_counts()[2]], 
+    fig2 = px.pie(values=[neuro_gender.get(1, 0), neuro_gender.get(2, 0)], 
                  names=['Male', 'Female'], 
                  title='Gender Distribution - Neuro')
     
@@ -88,9 +97,9 @@ elif page == "Demographics":
     
     # BMI distribution
     bmi_counts = pd.DataFrame({
-        'Category': ['Underweight', 'Normal', 'Overweight', 'Obese'],
-        'General': general['BMI_CATEGORY'].value_counts().sort_index().values,
-        'Neuro': neuro['BMI_CATEGORY'].value_counts().sort_index().values
+        'Category': ['Unknown', 'Underweight', 'Normal', 'Overweight', 'Obese'],
+        'General': [general['BMI_CATEGORY'].value_counts().get(i, 0) for i in range(5)],
+        'Neuro': [neuro['BMI_CATEGORY'].value_counts().get(i, 0) for i in range(5)]
     })
     
     fig3 = px.bar(bmi_counts, x='Category', y=['General', 'Neuro'], barmode='group',
@@ -100,8 +109,8 @@ elif page == "Demographics":
     # Working place
     wp_counts = pd.DataFrame({
         'Place': ['Hospital', 'Clinic', 'Community'],
-        'General': general['WORKING_PLACE'].value_counts().sort_index().values,
-        'Neuro': neuro['WORKING_PLACE'].value_counts().sort_index().values
+        'General': [general['WORKING_PLACE'].value_counts().get(i, 0) for i in [1,2,3]],
+        'Neuro': [neuro['WORKING_PLACE'].value_counts().get(i, 0) for i in [1,2,3]]
     })
     
     fig4 = px.bar(wp_counts, x='Place', y=['General', 'Neuro'], barmode='group',
@@ -113,11 +122,13 @@ elif page == "Pain Analysis":
     
     # Pain categories
     pain_cats = ['Neck', 'Shoulder', 'Elbow', 'Wrist', 'Upper Back', 'Lower Back', 'Hip', 'Knee', 'Ankle']
+    
+    # 12-month pain prevalence
     general_pain = [
-        general[['PNECK_PAIN', 'P12_SHD', 'P12_ELB', 'P12_WRI', 'P12_UB', 'P12_LB', 'P12_HIP', 'P12 _KNEE', 'P12 _ANK']].sum().values
+        general[['PNECK_PAIN', 'P12_SHD', 'P12_ELB', 'P12_WRI', 'P12_UB', 'P12_LB', 'P12_HIP', 'P12_KNEE', 'P12_ANK']].sum().values
     ]
     neuro_pain = [
-        neuro[['PNECK_PAIN', 'P12_SHD', 'P12_ELB', 'P12_WRI', 'P12_UB', 'P12_LB', 'P12_HIP', 'P12 _KNEE', 'P12 _ANK']].sum().values
+        neuro[['PNECK_PAIN', 'P12_SHD', 'P12_ELB', 'P12_WRI', 'P12_UB', 'P12_LB', 'P12_HIP', 'P12_KNEE', 'P12_ANK']].sum().values
     ]
     
     fig1 = go.Figure()
@@ -143,10 +154,10 @@ elif page == "Pain Analysis":
     
     # Pain in last 7 days
     general_7day = [
-        general[['7DAYS_PAIN', 'L7_SHD', 'L7 _ELB', 'L7_WRI', 'L7_UB', 'L7DAYS_LB', 'L7_HIP', 'L7_KNEE', 'L7_AKL']].sum().values
+        general[['7DAYS_PAIN', 'L7_SHD', 'L7_ELB', 'L7_WRI', 'L7_UB', 'LFP_SHD', 'L7_HIP', 'L7_KNEE', 'L7_AKL']].sum().values
     ]
     neuro_7day = [
-        neuro[['7DAYS_PAIN', 'L7_SHD', 'L7 _ELB', 'L7_WRI', 'L7_UB', 'L7DAYS_LB', 'L7_HIP', 'L7_KNEE', 'L7_AKL']].sum().values
+        neuro[['7DAYS_PAIN', 'L7_SHD', 'L7_ELB', 'L7_WRI', 'L7_UB', 'LFP_SHD', 'L7_HIP', 'L7_KNEE', 'L7_AKL']].sum().values
     ]
     
     fig2 = go.Figure()
@@ -243,7 +254,7 @@ elif page == "Detailed Comparisons":
         'Lower Back Pain (12-month)': ('P12_LB', 'P12_LB'),
         'Neck Pain (7-day)': ('7DAYS_PAIN', '7DAYS_PAIN'),
         'Shoulder Pain (7-day)': ('L7_SHD', 'L7_SHD'),
-        'Lower Back Pain (7-day)': ('L7DAYS_LB', 'L7DAYS_LB')
+        'Lower Back Pain (7-day)': ('LFP_SHD', 'LFP_SHD')
     }
     
     cols = st.columns(3)
@@ -259,8 +270,8 @@ elif page == "Detailed Comparisons":
     st.subheader("Doctor Visits Comparison")
     
     doc_metrics = {
-        'Neck': ('DOC _VISIT', 'DOC _VISIT'),
-        'Shoulder': ('DOC _VISIT.1', 'DOC _VISIT.1'),
+        'Neck': ('DOC_VISIT', 'DOC_VISIT'),
+        'Shoulder': ('DOC_VISIT', 'DOC_VISIT'),  # Note: Same as neck in original data
         'Elbow': ('DV_ELB', 'DV_ELB'),
         'Wrist': ('DV_WRI', 'DV_WRI'),
         'Upper Back': ('DV_UB', 'DV_UB'),
@@ -291,9 +302,6 @@ elif page == "Detailed Comparisons":
     - Neuro physiotherapists report more lower back pain affecting work
     - Both groups report similar levels of neck pain affecting work
     """)
-
-# Add group column for visualization
-df['Group'] = ['General']*20 + ['Neuro']*20
 
 # Footer
 st.sidebar.markdown("---")
