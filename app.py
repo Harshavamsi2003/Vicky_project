@@ -1,148 +1,85 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# Load your exact dataset
+# Load data
 @st.cache_data
 def load_data():
     df = pd.read_excel('DATA.xlsx')
-    # Clean column names
-    df.columns = df.columns.str.strip()
-    # Create groups
-    general = df.iloc[:20].copy()
-    neuro = df.iloc[20:].copy()
-    general['Group'] = 'General Physiotherapists'
-    neuro['Group'] = 'Pediatric Neuro Physios'
-    return pd.concat([general, neuro])
+    # Split into two groups
+    df['Group'] = ['General Physiotherapists']*20 + ['Pediatric Neuro Physios']*20
+    return df
 
 df = load_data()
 
-# Set up the page
+# Set up the Streamlit app
 st.set_page_config(layout="wide")
-st.title("Ergonomic Risk Analysis - Your Dataset")
+st.title("Comparative Analysis of Ergonomic Risk Factors")
 
-# 1. REBA Score Distribution by Group
-st.header("1. REBA Score Distribution by Group")
-fig1 = px.box(
-    df,
-    x='Group',
-    y='REBA_CATEGORY',
-    color='Group',
-    color_discrete_map={
-        'General Physiotherapists': '#636EFA',
-        'Pediatric Neuro Physios': '#EF553B'
-    },
-    labels={'REBA_CATEGORY': 'REBA Score', 'Group': ''},
-    width=800,
-    height=500
-)
-fig1.update_traces(boxmean=True)
+# REBA Category Distribution
+st.header("1. REBA Category Distribution by Group")
+reba_counts = df.groupby(['Group', 'REBA_CATEGORY']).size().unstack().fillna(0)
+reba_counts = reba_counts.reindex(columns=[0,1,2,3,4], fill_value=0)  # Ensure all categories are present
+
+fig1 = px.bar(reba_counts.T, 
+              barmode='group',
+              labels={'value': 'Count', 'variable': 'Group', 'index': 'REBA Category'},
+              title="Distribution of REBA Risk Categories by Group",
+              color_discrete_sequence=px.colors.qualitative.Pastel)
+fig1.update_traces(hovertemplate="Group: %{variable}<br>REBA Category: %{x}<br>Count: %{y}")
 st.plotly_chart(fig1, use_container_width=True)
 
-# 2. REBA Categories Distribution (0-4)
-st.header("2. REBA Risk Categories Distribution")
-reba_counts = df.groupby(['Group', 'REBA_CATEGORY']).size().unstack().fillna(0)
-reba_counts = reba_counts.T.reset_index()
-reba_counts.columns = ['REBA Score', 'General Physiotherapists', 'Pediatric Neuro Physios']
-
-fig2 = px.bar(
-    reba_counts,
-    x='REBA Score',
-    y=['General Physiotherapists', 'Pediatric Neuro Physios'],
-    barmode='group',
-    labels={'value': 'Number of Therapists', 'variable': 'Group'},
-    color_discrete_map={
-        'General Physiotherapists': '#636EFA',
-        'Pediatric Neuro Physios': '#EF553B'
-    },
-    width=800,
-    height=500
-)
-fig2.update_layout(
-    xaxis={'tickvals': [0, 1, 2, 3, 4]},
-    xaxis_title='REBA Category',
-    yaxis_title='Count'
-)
+# REBA Score Comparison
+st.header("2. REBA Score Comparison")
+fig2 = px.box(df, x='Group', y='REBA_CATEGORY', 
+             color='Group',
+             labels={'REBA_CATEGORY': 'REBA Score', 'Group': ''},
+             title="Box Plot of REBA Scores by Group")
+fig2.update_traces(hovertemplate="Group: %{x}<br>REBA Score: %{y}")
 st.plotly_chart(fig2, use_container_width=True)
 
-# 3. Pain Prevalence Comparison (using your actual columns)
-st.header("3. Pain Prevalence Comparison (12 months)")
+# Pain Prevalence Comparison
+st.header("3. Pain Prevalence Comparison (Last 12 Months)")
 
-# Prepare pain data from your actual columns
-pain_cols = {
-    'Neck': 'PNECK_PAIN',
-    'Shoulders': 'P12_SHD',
-    'Elbows': 'P12_ELB',
-    'Wrists': 'P12_WRI',
-    'Upper Back': 'P12_UB',
-    'Lower Back': 'P12_LB',
-    'Hips': 'P12_HIP',
-    'Knees': 'P12_KNEE',
-    'Ankles': 'P12_ANK'
-}
-
+# Get all pain columns (P12_*)
+pain_cols = [col for col in df.columns if col.startswith('P12_')]
 pain_data = []
-for region, col in pain_cols.items():
+for col in pain_cols:
+    body_part = col.split('_')[1]
     general_pain = df[df['Group']=='General Physiotherapists'][col].sum()
     neuro_pain = df[df['Group']=='Pediatric Neuro Physios'][col].sum()
     pain_data.append({
-        'Body Region': region,
+        'Body Part': body_part,
         'General Physiotherapists': general_pain,
         'Pediatric Neuro Physios': neuro_pain
     })
-
 pain_df = pd.DataFrame(pain_data)
 
-fig3 = go.Figure()
-fig3.add_trace(go.Bar(
-    x=pain_df['Body Region'],
-    y=pain_df['General Physiotherapists'],
-    name='General',
-    marker_color='#636EFA'
-))
-fig3.add_trace(go.Bar(
-    x=pain_df['Body Region'],
-    y=pain_df['Pediatric Neuro Physios'],
-    name='Neuro',
-    marker_color='#EF553B'
-))
-fig3.update_layout(
-    barmode='group',
-    yaxis_title='Number of Cases',
-    xaxis_title='Body Region',
-    height=600
-)
+# Melt for plotting
+melted_pain = pain_df.melt(id_vars='Body Part', var_name='Group', value_name='Count')
+
+fig3 = px.bar(melted_pain, 
+             x='Body Part', 
+             y='Count', 
+             color='Group',
+             barmode='group',
+             title="Pain Prevalence by Body Part and Group",
+             labels={'Count': 'Number of Reports', 'Body Part': 'Body Region'},
+             color_discrete_sequence=px.colors.qualitative.Pastel)
+fig3.update_traces(hovertemplate="Group: %{customdata[0]}<br>Body Part: %{x}<br>Count: %{y}")
 st.plotly_chart(fig3, use_container_width=True)
 
-# 4. REBA vs Working Place
-st.header("4. REBA Scores by Working Place")
-fig4 = px.box(
-    df,
-    x='WORKING_PLACE',
-    y='REBA_CATEGORY',
-    color='Group',
-    color_discrete_map={
-        'General Physiotherapists': '#636EFA',
-        'Pediatric Neuro Physios': '#EF553B'
-    },
-    labels={'REBA_CATEGORY': 'REBA Score', 'WORKING_PLACE': 'Working Place'},
-    category_orders={'WORKING_PLACE': [1, 2, 3]},
-    width=800,
-    height=500
-)
+# REBA vs Pain Correlation
+st.header("4. REBA Score vs Pain Reports")
+df['Total_Pain'] = df[pain_cols].sum(axis=1)
+fig4 = px.scatter(df, 
+                 x='REBA_CATEGORY', 
+                 y='Total_Pain', 
+                 color='Group',
+                 trendline="lowess",
+                 labels={'REBA_CATEGORY': 'REBA Score', 'Total_Pain': 'Total Pain Reports'},
+                 title="REBA Score vs Total Pain Reports")
+fig4.update_traces(hovertemplate="REBA Score: %{x}<br>Pain Reports: %{y}")
 st.plotly_chart(fig4, use_container_width=True)
-
-# Key Findings
-st.header("Key Findings from Your Data")
-st.markdown("""
-- **REBA Scores**: Pediatric Neuro Physios show higher ergonomic risk scores
-- **Risk Distribution**: 
-  - General Physios mostly in categories 2-3
-  - Neuro Physios show more cases in higher risk categories
-- **Pain Prevalence**: 
-  - Neuro Physios report more pain across all body regions
-  - Most common pain areas: Neck, Shoulders, Lower Back
-- **Working Place Impact**: 
-  - Highest REBA scores observed in working place category 3
-""")
