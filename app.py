@@ -60,7 +60,7 @@ fig2 = px.bar(
     height=500
 )
 fig2.update_layout(
-    xaxis={'tickvals': [0, 1, 2, 3, 4],
+    xaxis={'tickvals': [0, 1, 2, 3, 4]},
     xaxis_title='REBA Category',
     yaxis_title='Count'
 )
